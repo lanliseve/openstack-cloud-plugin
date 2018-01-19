@@ -1,6 +1,7 @@
 package jenkins.plugins.openstack.compute;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -444,7 +445,53 @@ public class JCloudsCloud extends Cloud implements SlaveOptions.Holder {
         Jenkins.getInstance().addNode(node);
         rsp.sendRedirect2(req.getContextPath() + "/computer/" + node.getNodeName());
     }
+    public String doHelionProvision(@QueryParameter String name)  throws IOException{
 
+        JCloudsSlaveTemplate t = getTemplate(name);
+        if (t == null) {
+            return null;
+        }
+
+        List<Server> nodes = getOpenstack().getRunningNodes();
+        final int global = nodes.size();
+
+        Integer globalCap = getEffectiveSlaveOptions().getInstanceCap();
+        if (global >= globalCap) {
+            String msg = String.format("Instance cap of %s is now reached: %d", this.name, globalCap);
+            return null;
+        }
+
+        int template = 0;
+        for (Server node : nodes) {
+            if (t.hasProvisioned(node)) {
+                template++;
+            }
+        }
+
+        int templateCap = t.getEffectiveSlaveOptions().getInstanceCap();
+        if (template >= templateCap) {
+            String msg = String.format("Instance cap for this template (%s/%s) is now reached: %d", this.name, name, templateCap);
+            return null;
+        }
+
+       // CloudStatistics.ProvisioningListener provisioningListener = CloudStatistics.ProvisioningListener.get();
+        ProvisioningActivity.Id id = new ProvisioningActivity.Id(this.name, t.name);
+
+        JCloudsSlave node;
+        try {
+            StringWriter sw = new StringWriter();
+            StreamTaskListener listener = new StreamTaskListener(sw);
+           // provisioningListener.onStarted(id);
+            node = t.provisionSlave(this, id, listener);
+            //provisioningListener.onComplete(id, node);
+        } catch (Openstack.ActionFailed ex) {
+            //provisioningListener.onFailure(id, ex);
+            return null;
+        }
+        Jenkins.getInstance().addNode(node);
+        //rsp.sendRedirect2(req.getContextPath() + "/computer/" + node.getNodeName());
+        return node.getNodeName();
+    }
     /**
      * Get connected OpenStack client wrapper.
      */

@@ -23,6 +23,7 @@
  */
 package jenkins.plugins.openstack.compute.internal;
 
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -63,6 +64,10 @@ import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.Network;
 import org.openstack4j.openstack.OSFactory;
+import org.openstack4j.model.common.Identifier;
+import org.openstack4j.model.identity.Access;
+import org.openstack4j.core.transport.Config;
+import org.openstack4j.core.transport.ProxyHost;
 
 import hudson.util.Secret;
 import jenkins.model.Jenkins;
@@ -84,19 +89,25 @@ public class Openstack {
 
     private static final Logger LOGGER = Logger.getLogger(Openstack.class.getName());
     private static final String FINGERPRINT_KEY = "jenkins-instance";
+    private static final String HTTP_PREFIX = "http://";
 
     private final OSClient client;
 
     public Openstack(@Nonnull String endPointUrl, @Nonnull String identity, @Nonnull Secret credential, @CheckForNull String region) {
         // TODO refactor to split tenant:username everywhere including UI
         String[] id = identity.split(":", 2);
-        String tenant = id.length > 0 ? id[0] : "";
+        String tenantId = id.length > 0 ? id[0] : "";
         String username = id.length > 1 ? id[1] : "";
-        client = OSFactory.builder().endpoint(endPointUrl)
-                .credentials(username, credential.getPlainText())
-                .tenantName(tenant)
-                .authenticate()
-                .useRegion(region)
+
+        Access access = OSFactory.builderV3().endpoint(endPointUrl)
+                        .credentials(username, credential.getPlainText(), Identifier.byName("hpe"))
+                        .scopeToProject(Identifier.byId(tenantId), Identifier.byName("default"))
+                        .withConfig(Config.newConfig().withProxy(ProxyHost.of("http://proxy.houston.hpecorp.net", 8080)))
+                        .authenticate()
+                        .getAccess();
+
+
+        client = OSFactory.clientFromAccess(access);
         ;
         debug("Openstack client created for " + endPointUrl);
     }

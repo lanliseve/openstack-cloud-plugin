@@ -1,6 +1,7 @@
 package jenkins.plugins.openstack.compute;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -246,24 +247,23 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
         LOGGER.info("Provisioned: " + server.toString());
 
         String poolName = opts.getFloatingIpPool();
-        if (poolName != null) {
-            LOGGER.fine("Assigning floating IP from " + poolName + " to " + nodeName);
-            try {
-                openstack.assignFloatingIp(server, poolName);
-                // Make sure address information is reflected in metadata
-                return openstack.updateInfo(server);
-            } catch (Throwable ex) {
-                // Do not leak the server as we are aborting the provisioning
-                try {
-                    openstack.destroyServer(server);
-                } catch (Throwable e) {
-                    ex.addSuppressed(e);
-                }
-                throw ex;
-            }
+        if (poolName == null) {
+            poolName = "";
         }
-
-        return server;
+        LOGGER.fine("Assigning floating IP from " + poolName + " to " + nodeName);
+        try {
+            openstack.assignFloatingIp(server, poolName);
+            // Make sure address information is reflected in metadata
+            return openstack.updateInfo(server);
+        } catch (Throwable ex) {
+            // Do not leak the server as we are aborting the provisioning
+            try {
+                openstack.destroyServer(server);
+            } catch (Throwable e) {
+                ex.addSuppressed(e);
+            }
+            throw ex;
+        }
     }
 
     private static String[] csvToArray(final String csv) {
